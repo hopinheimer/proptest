@@ -44,12 +44,12 @@ hardware-rng = ["x86"]
 # Enables use of the "fork" feature.
 #
 # Requires std.
-fork = ["std", "rusty-fork", "tempfile"]
+fork = ["std", "tempfile"]
 
 # Enables use of the "timeout" feature.
 #
 # Requires the "fork" feature.
-timeout = ["fork", "rusty-fork/timeout"]
+timeout = ["fork"]
 
 # Enables support for 64-bit atomic integers.
 # This is enabled by default. Some no_std environments do not support it and
@@ -74,7 +74,7 @@ bit-vec = { workspace = true, optional = true }
 rand = { workspace = true, features = ["alloc"] }
 rand_xorshift = { workspace = true }
 rand_chacha = { workspace = true }
-rusty-fork = { workspace = true, optional = true }
+# rusty-fork = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 x86 = { workspace = true, optional = true }
 

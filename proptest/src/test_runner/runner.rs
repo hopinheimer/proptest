@@ -14,8 +14,8 @@ use core::{fmt, iter};
 #[cfg(feature = "std")]
 use std::panic::{self, AssertUnwindSafe};
 
-#[cfg(feature = "fork")]
-use rusty_fork;
+// #[cfg(feature = "fork")]
+// use rusty_fork;
 #[cfg(feature = "fork")]
 use std::cell::{Cell, RefCell};
 #[cfg(feature = "fork")]
@@ -412,11 +412,13 @@ impl TestRunner {
         strategy: &S,
         test: impl Fn(S::Value) -> TestCaseResult,
     ) -> TestRunResult<S> {
-        if self.config.fork() {
-            self.run_in_fork(strategy, test)
-        } else {
-            self.run_in_process(strategy, test)
-        }
+        // if self.config.fork() {
+        //     // self.run_in_fork(strategy, test)
+        // } else {
+        //     self.run_in_process(strategy, test)
+        // }
+
+        self.run_in_process(strategy, test)
     }
 
     #[cfg(not(feature = "fork"))]
@@ -428,143 +430,143 @@ impl TestRunner {
         unreachable!()
     }
 
-    #[cfg(feature = "fork")]
-    fn run_in_fork<S: Strategy>(
-        &mut self,
-        strategy: &S,
-        test: impl Fn(S::Value) -> TestCaseResult,
-    ) -> TestRunResult<S> {
-        let mut test = Some(test);
+    // #[cfg(feature = "fork")]
+    // fn run_in_fork<S: Strategy>(
+    //     &mut self,
+    //     strategy: &S,
+    //     test: impl Fn(S::Value) -> TestCaseResult,
+    // ) -> TestRunResult<S> {
+    //     let mut test = Some(test);
 
-        let test_name = rusty_fork::fork_test::fix_module_path(
-            self.config
-                .test_name
-                .expect("Must supply test_name when forking enabled"),
-        );
-        let forkfile: RefCell<Option<tempfile::NamedTempFile>> =
-            RefCell::new(None);
-        let init_forkfile_size = Cell::new(0u64);
-        let seed = self.rng.new_rng_seed();
-        let mut replay = replay::Replay {
-            seed,
-            steps: vec![],
-        };
-        let mut child_count = 0;
-        let timeout = self.config.timeout();
+    //     let test_name = rusty_fork::fork_test::fix_module_path(
+    //         self.config
+    //             .test_name
+    //             .expect("Must supply test_name when forking enabled"),
+    //     );
+    //     let forkfile: RefCell<Option<tempfile::NamedTempFile>> =
+    //         RefCell::new(None);
+    //     let init_forkfile_size = Cell::new(0u64);
+    //     let seed = self.rng.new_rng_seed();
+    //     let mut replay = replay::Replay {
+    //         seed,
+    //         steps: vec![],
+    //     };
+    //     let mut child_count = 0;
+    //     let timeout = self.config.timeout();
 
-        fn forkfile_size(forkfile: &Option<tempfile::NamedTempFile>) -> u64 {
-            forkfile.as_ref().map_or(0, |ff| {
-                ff.as_file().metadata().map(|md| md.len()).unwrap_or(0)
-            })
-        }
+    //     fn forkfile_size(forkfile: &Option<tempfile::NamedTempFile>) -> u64 {
+    //         forkfile.as_ref().map_or(0, |ff| {
+    //             ff.as_file().metadata().map(|md| md.len()).unwrap_or(0)
+    //         })
+    //     }
 
-        loop {
-            let (child_error, last_fork_file_len) = rusty_fork::fork(
-                test_name,
-                rusty_fork_id!(),
-                |cmd| {
-                    let mut forkfile = forkfile.borrow_mut();
-                    if forkfile.is_none() {
-                        *forkfile =
-                            Some(tempfile::NamedTempFile::new().expect(
-                                "Failed to create temporary file for fork",
-                            ));
-                        replay.init_file(forkfile.as_mut().unwrap()).expect(
-                            "Failed to initialise temporary file for fork",
-                        );
-                    }
+    //     loop {
+    //         let (child_error, last_fork_file_len) = rusty_fork::fork(
+    //             test_name,
+    //             rusty_fork_id!(),
+    //             |cmd| {
+    //                 let mut forkfile = forkfile.borrow_mut();
+    //                 if forkfile.is_none() {
+    //                     *forkfile =
+    //                         Some(tempfile::NamedTempFile::new().expect(
+    //                             "Failed to create temporary file for fork",
+    //                         ));
+    //                     replay.init_file(forkfile.as_mut().unwrap()).expect(
+    //                         "Failed to initialise temporary file for fork",
+    //                     );
+    //                 }
 
-                    init_forkfile_size.set(forkfile_size(&forkfile));
+    //                 init_forkfile_size.set(forkfile_size(&forkfile));
 
-                    cmd.env(ENV_FORK_FILE, forkfile.as_ref().unwrap().path());
-                },
-                |child, _| {
-                    await_child(
-                        child,
-                        &mut forkfile.borrow_mut().as_mut().unwrap(),
-                        timeout,
-                    )
-                },
-                || match self.run_in_process(strategy, test.take().unwrap()) {
-                    Ok(_) => (),
-                    Err(e) => panic!(
-                        "Test failed normally in child process.\n{}\n{}",
-                        e, self
-                    ),
-                },
-            )
-            .expect("Fork failed");
+    //                 cmd.env(ENV_FORK_FILE, forkfile.as_ref().unwrap().path());
+    //             },
+    //             |child, _| {
+    //                 await_child(
+    //                     child,
+    //                     &mut forkfile.borrow_mut().as_mut().unwrap(),
+    //                     timeout,
+    //                 )
+    //             },
+    //             || match self.run_in_process(strategy, test.take().unwrap()) {
+    //                 Ok(_) => (),
+    //                 Err(e) => panic!(
+    //                     "Test failed normally in child process.\n{}\n{}",
+    //                     e, self
+    //                 ),
+    //             },
+    //         )
+    //         .expect("Fork failed");
 
-            let parsed = replay::Replay::parse_from(
-                &mut forkfile.borrow_mut().as_mut().unwrap(),
-            )
-            .expect("Failed to re-read fork file");
-            match parsed {
-                replay::ReplayFileStatus::InProgress(new_replay) => {
-                    replay = new_replay
-                }
-                replay::ReplayFileStatus::Terminated(new_replay) => {
-                    replay = new_replay;
-                    break;
-                }
-                replay::ReplayFileStatus::Corrupt => {
-                    panic!("Child process corrupted replay file")
-                }
-            }
+    //         let parsed = replay::Replay::parse_from(
+    //             &mut forkfile.borrow_mut().as_mut().unwrap(),
+    //         )
+    //         .expect("Failed to re-read fork file");
+    //         match parsed {
+    //             replay::ReplayFileStatus::InProgress(new_replay) => {
+    //                 replay = new_replay
+    //             }
+    //             replay::ReplayFileStatus::Terminated(new_replay) => {
+    //                 replay = new_replay;
+    //                 break;
+    //             }
+    //             replay::ReplayFileStatus::Corrupt => {
+    //                 panic!("Child process corrupted replay file")
+    //             }
+    //         }
 
-            let curr_forkfile_size = forkfile_size(&forkfile.borrow());
+    //         let curr_forkfile_size = forkfile_size(&forkfile.borrow());
 
-            // If the child failed to append *anything* to the forkfile, it
-            // crashed or timed out before starting even one test case, so
-            // bail.
-            if curr_forkfile_size == init_forkfile_size.get() {
-                return Err(TestError::Abort(
-                    "Child process crashed or timed out before the first test \
-                     started running; giving up."
-                        .into(),
-                ));
-            }
+    //         // If the child failed to append *anything* to the forkfile, it
+    //         // crashed or timed out before starting even one test case, so
+    //         // bail.
+    //         if curr_forkfile_size == init_forkfile_size.get() {
+    //             return Err(TestError::Abort(
+    //                 "Child process crashed or timed out before the first test \
+    //                  started running; giving up."
+    //                     .into(),
+    //             ));
+    //         }
 
-            // The child only terminates early if it outright crashes or we
-            // kill it due to timeout, so add a synthetic failure to the
-            // output. But only do this if the length of the fork file is the
-            // same as when we last saw it, or if the child was not killed due
-            // to timeout. (This is because the child could have appended
-            // something to the file after we gave up waiting for it but before
-            // we were able to kill it).
-            if last_fork_file_len.map_or(true, |last_fork_file_len| {
-                last_fork_file_len == curr_forkfile_size
-            }) {
-                let error = Err(child_error.unwrap_or(TestCaseError::fail(
-                    "Child process was terminated abruptly \
-                     but with successful status",
-                )));
-                replay::append(forkfile.borrow_mut().as_mut().unwrap(), &error)
-                    .expect("Failed to append to replay file");
-                replay.steps.push(error);
-            }
+    //         // The child only terminates early if it outright crashes or we
+    //         // kill it due to timeout, so add a synthetic failure to the
+    //         // output. But only do this if the length of the fork file is the
+    //         // same as when we last saw it, or if the child was not killed due
+    //         // to timeout. (This is because the child could have appended
+    //         // something to the file after we gave up waiting for it but before
+    //         // we were able to kill it).
+    //         if last_fork_file_len.map_or(true, |last_fork_file_len| {
+    //             last_fork_file_len == curr_forkfile_size
+    //         }) {
+    //             let error = Err(child_error.unwrap_or(TestCaseError::fail(
+    //                 "Child process was terminated abruptly \
+    //                  but with successful status",
+    //             )));
+    //             replay::append(forkfile.borrow_mut().as_mut().unwrap(), &error)
+    //                 .expect("Failed to append to replay file");
+    //             replay.steps.push(error);
+    //         }
 
-            // Bail if we've gone through too many processes in case the
-            // shrinking process itself is crashing.
-            child_count += 1;
-            if child_count >= 10000 {
-                return Err(TestError::Abort(
-                    "Giving up after 10000 child processes crashed".into(),
-                ));
-            }
-        }
+    //         // Bail if we've gone through too many processes in case the
+    //         // shrinking process itself is crashing.
+    //         child_count += 1;
+    //         if child_count >= 10000 {
+    //             return Err(TestError::Abort(
+    //                 "Giving up after 10000 child processes crashed".into(),
+    //             ));
+    //         }
+    //     }
 
-        // Run through the steps in-process (without ever running the actual
-        // tests) to produce the shrunken value and update the persistence
-        // file.
-        self.rng.set_seed(replay.seed);
-        self.run_in_process_with_replay(
-            strategy,
-            |_| panic!("Ran past the end of the replay"),
-            replay.steps.into_iter(),
-            ForkOutput::empty(),
-        )
-    }
+    //     // Run through the steps in-process (without ever running the actual
+    //     // tests) to produce the shrunken value and update the persistence
+    //     // file.
+    //     self.rng.set_seed(replay.seed);
+    //     self.run_in_process_with_replay(
+    //         strategy,
+    //         |_| panic!("Ran past the end of the replay"),
+    //         replay.steps.into_iter(),
+    //         ForkOutput::empty(),
+    //     )
+    // }
 
     fn run_in_process<S: Strategy>(
         &mut self,
@@ -978,24 +980,24 @@ fn init_replay(
     (iter::empty(), ForkOutput::empty())
 }
 
-#[cfg(feature = "fork")]
-fn await_child_without_timeout(
-    child: &mut rusty_fork::ChildWrapper,
-) -> (Option<TestCaseError>, Option<u64>) {
-    let status = child.wait().expect("Failed to wait for child process");
+// #[cfg(feature = "fork")]
+// fn await_child_without_timeout(
+//     child: &mut rusty_fork::ChildWrapper,
+// ) -> (Option<TestCaseError>, Option<u64>) {
+//     let status = child.wait().expect("Failed to wait for child process");
 
-    if status.success() {
-        (None, None)
-    } else {
-        (
-            Some(TestCaseError::fail(format!(
-                "Child process exited with {}",
-                status
-            ))),
-            None,
-        )
-    }
-}
+//     if status.success() {
+//         (None, None)
+//     } else {
+//         (
+//             Some(TestCaseError::fail(format!(
+//                 "Child process exited with {}",
+//                 status
+//             ))),
+//             None,
+//         )
+//     }
+// }
 
 #[cfg(all(feature = "fork", not(feature = "timeout")))]
 fn await_child(
@@ -1006,65 +1008,65 @@ fn await_child(
     await_child_without_timeout(child)
 }
 
-#[cfg(all(feature = "fork", feature = "timeout"))]
-fn await_child(
-    child: &mut rusty_fork::ChildWrapper,
-    forkfile: &mut tempfile::NamedTempFile,
-    timeout: u32,
-) -> (Option<TestCaseError>, Option<u64>) {
-    use std::time::Duration;
+// #[cfg(all(feature = "fork", feature = "timeout"))]
+// fn await_child(
+//     child: &mut rusty_fork::ChildWrapper,
+//     forkfile: &mut tempfile::NamedTempFile,
+//     timeout: u32,
+// ) -> (Option<TestCaseError>, Option<u64>) {
+//     use std::time::Duration;
 
-    if 0 == timeout {
-        return await_child_without_timeout(child);
-    }
+//     if 0 == timeout {
+//         return await_child_without_timeout(child);
+//     }
 
-    // The child can run for longer than the timeout since it may run
-    // multiple tests. Each time the timeout expires, we check whether the
-    // file has grown larger. If it has, we allow the child to keep running
-    // until the next timeout.
-    let mut last_forkfile_len = forkfile
-        .as_file()
-        .metadata()
-        .map(|md| md.len())
-        .unwrap_or(0);
+//     // The child can run for longer than the timeout since it may run
+//     // multiple tests. Each time the timeout expires, we check whether the
+//     // file has grown larger. If it has, we allow the child to keep running
+//     // until the next timeout.
+//     let mut last_forkfile_len = forkfile
+//         .as_file()
+//         .metadata()
+//         .map(|md| md.len())
+//         .unwrap_or(0);
 
-    loop {
-        if let Some(status) = child
-            .wait_timeout(Duration::from_millis(timeout.into()))
-            .expect("Failed to wait for child process")
-        {
-            if status.success() {
-                return (None, None);
-            } else {
-                return (
-                    Some(TestCaseError::fail(format!(
-                        "Child process exited with {}",
-                        status
-                    ))),
-                    None,
-                );
-            }
-        }
+//     loop {
+//         if let Some(status) = child
+//             .wait_timeout(Duration::from_millis(timeout.into()))
+//             .expect("Failed to wait for child process")
+//         {
+//             if status.success() {
+//                 return (None, None);
+//             } else {
+//                 return (
+//                     Some(TestCaseError::fail(format!(
+//                         "Child process exited with {}",
+//                         status
+//                     ))),
+//                     None,
+//                 );
+//             }
+//         }
 
-        let current_len = forkfile
-            .as_file()
-            .metadata()
-            .map(|md| md.len())
-            .unwrap_or(0);
-        // If we've gone a full timeout period without the file growing,
-        // fail the test and kill the child.
-        if current_len <= last_forkfile_len {
-            return (
-                Some(TestCaseError::fail(format!(
-                    "Timed out waiting for child process"
-                ))),
-                Some(current_len),
-            );
-        } else {
-            last_forkfile_len = current_len;
-        }
-    }
-}
+//         let current_len = forkfile
+//             .as_file()
+//             .metadata()
+//             .map(|md| md.len())
+//             .unwrap_or(0);
+//         // If we've gone a full timeout period without the file growing,
+//         // fail the test and kill the child.
+//         if current_len <= last_forkfile_len {
+//             return (
+//                 Some(TestCaseError::fail(format!(
+//                     "Timed out waiting for child process"
+//                 ))),
+//                 Some(current_len),
+//             );
+//         } else {
+//             last_forkfile_len = current_len;
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod test {
@@ -1487,57 +1489,57 @@ mod timeout_tests {
 
     use super::*;
 
-    rusty_fork_test! {
-        #![rusty_fork(timeout_ms = 4_000)]
+    // rusty_fork_test! {
+    //     #![rusty_fork(timeout_ms = 4_000)]
 
-        #[test]
-        fn max_shrink_iters_works() {
-            test_shrink_bail(Config {
-                max_shrink_iters: 5,
-                .. Config::default()
-            });
-        }
+    //     #[test]
+    //     fn max_shrink_iters_works() {
+    //         test_shrink_bail(Config {
+    //             max_shrink_iters: 5,
+    //             .. Config::default()
+    //         });
+    //     }
 
-        #[test]
-        fn max_shrink_time_works() {
-            test_shrink_bail(Config {
-                max_shrink_time: 1000,
-                .. Config::default()
-            });
-        }
+    //     #[test]
+    //     fn max_shrink_time_works() {
+    //         test_shrink_bail(Config {
+    //             max_shrink_time: 1000,
+    //             .. Config::default()
+    //         });
+    //     }
 
-        #[test]
-        fn max_shrink_iters_works_with_forking() {
-            test_shrink_bail(Config {
-                fork: true,
-                test_name: Some(
-                    concat!(module_path!(),
-                            "::max_shrink_iters_works_with_forking")),
-                max_shrink_time: 1000,
-                .. Config::default()
-            });
-        }
+    //     #[test]
+    //     fn max_shrink_iters_works_with_forking() {
+    //         test_shrink_bail(Config {
+    //             fork: true,
+    //             test_name: Some(
+    //                 concat!(module_path!(),
+    //                         "::max_shrink_iters_works_with_forking")),
+    //             max_shrink_time: 1000,
+    //             .. Config::default()
+    //         });
+    //     }
 
-        #[test]
-        fn detects_child_failure_to_start() {
-            let mut runner = TestRunner::new(Config {
-                timeout: 100,
-                test_name: Some(
-                    concat!(module_path!(),
-                            "::detects_child_failure_to_start")),
-                .. Config::default()
-            });
-            let result = runner.run(&Just(()).prop_map(|()| {
-                thread::sleep(Duration::from_millis(200))
-            }), Ok);
+    //     #[test]
+    //     fn detects_child_failure_to_start() {
+    //         let mut runner = TestRunner::new(Config {
+    //             timeout: 100,
+    //             test_name: Some(
+    //                 concat!(module_path!(),
+    //                         "::detects_child_failure_to_start")),
+    //             .. Config::default()
+    //         });
+    //         let result = runner.run(&Just(()).prop_map(|()| {
+    //             thread::sleep(Duration::from_millis(200))
+    //         }), Ok);
 
-            if let Err(TestError::Abort(_)) = result {
-                // OK
-            } else {
-                panic!("Unexpected result: {:?}", result);
-            }
-        }
-    }
+    //         if let Err(TestError::Abort(_)) = result {
+    //             // OK
+    //         } else {
+    //             panic!("Unexpected result: {:?}", result);
+    //         }
+    //     }
+    // }
 
     fn test_shrink_bail(config: Config) {
         let mut runner = TestRunner::new(config);

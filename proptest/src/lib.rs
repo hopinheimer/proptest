@@ -54,9 +54,9 @@ extern crate bit_set;
 #[macro_use]
 extern crate lazy_static;
 
-#[cfg(feature = "fork")]
-#[macro_use]
-extern crate rusty_fork;
+// #[cfg(feature = "fork")]
+// #[macro_use]
+// extern crate rusty_fork;
 
 #[macro_use]
 mod macros;
