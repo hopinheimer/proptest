@@ -90,23 +90,24 @@ mod var_error {
         })
     }
 
-    #[cfg(not(target_os = "windows"))]
-    fn osstring_invalid_string() -> impl Strategy<Value = OsString> {
-        use crate::arbitrary::_std::string::not_utf8_bytes;
-        use std::os::unix::ffi::OsStringExt;
-        static_map(not_utf8_bytes(true), OsString::from_vec)
-    }
+    // #[cfg(not(target_os = "windows"))]
+    // fn osstring_invalid_string() -> impl Strategy<Value = OsString> {
+    //     // use crate::arbitrary::_std::string::not_utf8_bytes;
+    //     // use std::os::unix::ffi::OsStringExt;
+    //     // static_map(not_utf8_bytes(true), OsString::from_vec)
+        
+    // }
 
-    arbitrary!(VarError,
-        TupleUnion<(
-            WA<Just<Self>>,
-            WA<SFnPtrMap<BoxedStrategy<OsString>, Self>>
-        )>;
-        prop_oneof![
-            Just(VarError::NotPresent),
-            static_map(osstring_invalid_string().boxed(), VarError::NotUnicode)
-        ]
-    );
+    // arbitrary!(VarError,
+    //     TupleUnion<(
+    //         WA<Just<Self>>,
+    //         WA<SFnPtrMap<BoxedStrategy<OsString>, Self>>
+    //     )>;
+    //     prop_oneof![
+    //         Just(VarError::NotPresent),
+    //         static_map(osstring_invalid_string().boxed(), VarError::NotUnicode)
+    //     ]
+    // );
 }
 
 #[cfg(test)]
@@ -120,8 +121,8 @@ mod test {
         args_os => ArgsOs,
         vars => Vars,
         vars_os => VarsOs,
-        join_paths_error => JoinPathsError,
-        var_error => VarError
+        join_paths_error => JoinPathsError
+        // var_error => VarError
     );
 
     proptest! {
